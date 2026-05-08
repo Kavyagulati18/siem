@@ -1,0 +1,28 @@
+# Virtual Environment
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.cpython-314.pyc
+
+# Database (SQLite won't work on Vercel)
+database.db
+*.db
+
+# Logs
+logs/
+*.log
+
+# VS Code settings
+.vscode/
+
+# Environment variables (keep secrets safe)
+.env
+
+# Vercel
+.vercel

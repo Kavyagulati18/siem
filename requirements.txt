@@ -1,0 +1,10 @@
+Flask
+Flask-Login
+Flask-SocketIO
+gunicorn
+eventlet
+requests
+scikit-learn
+numpy
+pandas
+werkzeug
