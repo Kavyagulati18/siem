@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>CyberPulse Attack Panel</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0f172a;
+            transition: background 0.3s ease, color 0.3s ease;
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, 0.06);
+            backdrop-filter: blur(20px);
+            transition: background 0.3s ease;
+        }
+
+        .sidebar {
+            background: rgba(255, 255, 255, 0.04);
+            backdrop-filter: blur(20px);
+            transition: background 0.3s ease;
+        }
+
+        /* --- LIGHT MODE OVERRIDES --- */
+        body.light {
+            background: #f1f5f9 !important;
+            color: #000000 !important;
+        }
+
+        body.light h1,
+        body.light h2,
+        body.light div,
+        body.light span {
+            color: #000000 !important;
+        }
+
+        body.light .glass {
+            background: #ffffff !important;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e2e8f0;
+        }
+
+        body.light .sidebar {
+            background: #e2e8f0 !important;
+            border-right: 1px solid #cbd5e1;
+        }
+
+        body.light .attack-btn {
+            background: #f8fafc !important;
+            border: 1px solid #cbd5e1 !important;
+            color: #000000 !important;
+        }
+
+        body.light .attack-btn:hover {
+            background: #cbd5e1 !important;
+        }
+
+        body.light #terminal {
+            background: #000000 !important;
+            border: 1px solid #000000;
+        }
+
+        body.light .log-line {
+            color: #22c55e !important;
+        }
+
+        .log-line {
+            opacity: 0;
+            transform: translateY(5px);
+            animation: fadeIn 0.3s ease forwards;
+        }
+
+        @keyframes fadeIn {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+</head>
+
+<body class="text-white h-screen flex">
+
+    <div class="w-64 sidebar p-5 flex flex-col justify-between">
+        <div>
+            <h2 class="text-lg font-semibold mb-6">⚡ CyberPulse</h2>
+
+            <div class="space-y-3 text-sm">
+                <a href="/" class="text-gray-400 hover:text-white block">Dashboard</a>
+                <div class="font-medium text-white">Attack Panel</div>
+            </div>
+        </div>
+
+        <button onclick="toggleTheme()" class="text-sm bg-white/10 p-2 rounded-lg hover:bg-white/20 transition">
+            Toggle Theme
+        </button>
+    </div>
+
+    <div class="flex-1 p-6">
+        <div class="flex items-center gap-2 mb-6">
+            <div class="w-3 h-3 bg-red-500 rounded-full"></div>
+            <div class="w-3 h-3 bg-yellow-400 rounded-full"></div>
+            <div class="w-3 h-3 bg-green-500 rounded-full"></div>
+        </div>
+
+        <div class="glass rounded-2xl p-6 shadow-xl">
+            <h1 class="text-2xl font-semibold mb-4">Attack Simulator</h1>
+
+            <div class="grid grid-cols-2 gap-4">
+                <button onclick="runAttack('BRUTE FORCE')"
+                    class="attack-btn bg-white/10 hover:bg-white/20 transition p-4 rounded-xl text-left">
+                    Brute Force
+                </button>
+                <button onclick="runAttack('DDOS')"
+                    class="attack-btn bg-white/10 hover:bg-white/20 transition p-4 rounded-xl text-left">
+                    DDoS Attack
+                </button>
+                <button onclick="runAttack('SQL INJECTION')"
+                    class="attack-btn bg-white/10 hover:bg-white/20 transition p-4 rounded-xl text-left">
+                    SQL Injection
+                </button>
+                <button onclick="runAttack('XSS ATTACK')"
+                    class="attack-btn bg-white/10 hover:bg-white/20 transition p-4 rounded-xl text-left">
+                    XSS Attack
+                </button>
+            </div>
+
+            <div id="terminal"
+                class="mt-6 bg-black/50 rounded-xl p-4 h-56 overflow-auto text-green-400 text-sm font-mono border border-white/10">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function log(msg) {
+            const t = document.getElementById("terminal");
+            const line = document.createElement("div");
+            line.className = "log-line";
+            line.innerText = msg;
+            t.appendChild(line);
+            t.scrollTop = t.scrollHeight;
+
+            // ✅ SAVE TO LOCALSTORAGE FOR LOGS.HTML
+            let history = localStorage.getItem('server_logs_raw') || "";
+            const fakeIP = "192.168.1." + Math.floor(Math.random() * 255);
+
+            // Format for the Log Parser
+            let logEntry = "";
+            if (msg.includes("SQL")) logEntry = `Login attempt ' OR 1=1 -- from ${fakeIP}\n`;
+            else if (msg.includes("XSS")) logEntry = `Search query <script>alert('xss')<\/script> from ${fakeIP}\n`;
+            else if (msg.includes("DDOS")) logEntry = `Request from 10.0.0.5\n`;
+            else logEntry = `Failed Login from ${fakeIP}\n`;
+
+            localStorage.setItem('server_logs_raw', history + logEntry);
+        }
+
+        async function runAttack(type) {
+            const routes = {
+                'BRUTE FORCE': '/simulate/brute',
+                'DDOS': '/simulate/ddos',
+                'SQL INJECTION': '/simulate/sql',
+                'XSS ATTACK': '/simulate/xss'
+            };
+
+            log(`> Initializing ${type}...`);
+            log(`> Target: localhost:5000`);
+
+            const res = await fetch(routes[type]);
+            const data = await res.json();
+
+            setTimeout(() => {
+                log(`> [SUCCESS] ${type} payload delivered.`);
+                log(`> -----------------------------------`);
+            }, 800);
+        }
+
+        function toggleTheme() {
+            document.body.classList.toggle("light");
+        }
+    </script>
+</body>
+
+</html>

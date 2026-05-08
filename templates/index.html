@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CyberPulse</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+
+    <style>
+:root {
+    --bg: #0f172a;
+    --text: #ffffff;
+    --glass: rgba(255,255,255,0.06);
+}
+
+.light {
+    --bg: #f1f5f9;
+    --text: #0f172a;
+    --glass: rgba(0,0,0,0.05);
+}
+
+.light {
+    background: #f1f5f9 !important;
+    color: #0f172a !important;
+}
+
+.light * { color: #0f172a !important; }
+
+.light .bg-red-600,
+.light .bg-orange-500,
+.light .bg-yellow-400 { color: white !important; }
+
+.light .bg-white\/5 { background: rgba(0,0,0,0.05) !important; }
+
+.light .glass {
+    background: rgba(0,0,0,0.05) !important;
+    border: 1px solid rgba(0,0,0,0.1);
+}
+
+.light table { color: #0f172a !important; }
+.light a { color: gray !important; }
+
+.light button {
+    background: rgba(0,0,0,0.08) !important;
+    color: #0f172a !important;
+    border: 1px solid rgba(0,0,0,0.1);
+}
+
+.light button:hover { background: rgba(0,0,0,0.15) !important; }
+
+.light a.bg-white\/10 {
+    background: rgba(0,0,0,0.08) !important;
+    color: #0f172a !important;
+    border: 1px solid rgba(0,0,0,0.1);
+}
+
+.light a.bg-white\/10:hover { background: rgba(0,0,0,0.15) !important; }
+
+body {
+    font-family: 'Inter', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    transition: all 0.3s ease;
+}
+
+.glass {
+    background: var(--glass);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,0.08);
+}
+
+.pulse-red { animation: pulseRed 1.2s infinite; }
+
+@keyframes pulseRed {
+    0%   { box-shadow: 0 0 10px rgba(255,0,0,.3); }
+    50%  { box-shadow: 0 0 25px rgba(255,0,0,.8); }
+    100% { box-shadow: 0 0 10px rgba(255,0,0,.3); }
+}
+
+.terminal-line { animation: fadeUp .4s ease; }
+
+@keyframes fadeUp {
+    from { opacity:0; transform:translateY(10px); }
+    to   { opacity:1; transform:translateY(0); }
+}
+
+#socket-status {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    padding: 8px 16px;
+    border-radius: 999px;
+    font-size: 12px;
+}
+
+#map { border-radius: 18px; }
+
+/* ── Pulsing attack dot on the map ── */
+.attack-dot-wrapper {
+    position: relative;
+    width: 16px;
+    height: 16px;
+}
+
+.attack-dot-core {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 10px; height: 10px;
+    background: #ff2222;
+    border-radius: 50%;
+    box-shadow: 0 0 6px 2px rgba(255,34,34,0.8);
+    z-index: 2;
+}
+
+.attack-dot-ring {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%) scale(1);
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 34, 34, 0.7);
+    animation: ripple 1.6s ease-out infinite;
+    z-index: 1;
+}
+
+.attack-dot-ring2 {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%) scale(1);
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 100, 100, 0.4);
+    animation: ripple 1.6s ease-out infinite 0.6s;
+    z-index: 1;
+}
+
+@keyframes ripple {
+    0%   { transform: translate(-50%, -50%) scale(1);   opacity: 1; }
+    100% { transform: translate(-50%, -50%) scale(3.5); opacity: 0; }
+}
+</style>
+</head>
+
+<body class="text-white flex h-screen">
+
+<!-- Sidebar -->
+<div class="w-64 bg-white/5 backdrop-blur-xl p-5 flex flex-col justify-between">
+
+    <div>
+        <h2 class="text-lg font-semibold mb-6">⚡ CyberPulse</h2>
+
+        <div class="space-y-3 text-sm">
+            <div class="text-white font-medium mb-3">Dashboard</div>
+            <a href="/attack" class="text-gray-400 hover:text-white block">Attack Panel</a>
+        </div>
+    </div>
+
+    <button id="themeToggle"
+          class="text-sm bg-white/10 p-2 mt-[450px] rounded-lg hover:bg-white/20 text-center">
+         Toggle Theme
+    </button>
+
+    <a href="/logout" class="text-sm bg-white/10 p-2 rounded-lg hover:bg-white/20 text-center">
+        Logout
+    </a>
+
+</div>
+
+<script>
+const toggleBtn = document.getElementById("themeToggle");
+
+if(localStorage.getItem("theme") === "light"){
+    document.body.classList.add("light");
+    toggleBtn.textContent = "☀️ Light";
+}
+
+toggleBtn.onclick = () => {
+    document.body.classList.toggle("light");
+    if(document.body.classList.contains("light")){
+        localStorage.setItem("theme", "light");
+        toggleBtn.textContent = "Toggle Theme";
+    } else {
+        localStorage.setItem("theme", "dark");
+        toggleBtn.textContent = "Toggle Theme";
+    }
+};
+</script>
+
+<!-- Main -->
+<div class="flex-1 p-6 overflow-y-auto">
+
+<!-- Mac Controls -->
+<div class="flex items-center gap-2 mb-6">
+    <div class="w-3 h-3 bg-red-500 rounded-full"></div>
+    <div class="w-3 h-3 bg-yellow-400 rounded-full"></div>
+    <div class="w-3 h-3 bg-green-500 rounded-full"></div>
+</div>
+
+<!-- Header -->
+<div class="mb-6">
+    <h1 class="text-3xl font-semibold">Dashboard</h1>
+    <p class="text-gray-400 text-sm">Real-Time Threat Intelligence</p>
+</div>
+
+<!-- Stats -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-5 mb-8">
+
+    <div class="glass rounded-2xl p-5">
+        <p class="text-gray-400">🚨 Total Alerts</p>
+        <h2 class="text-4xl font-bold mt-2" id="alert-count">{{ alerts|length }}</h2>
+    </div>
+
+    <div class="glass rounded-2xl p-5">
+        <p class="text-gray-400">🚫 Blocked IPs</p>
+        <h2 class="text-4xl font-bold mt-2">{{ blocked_ips|length }}</h2>
+    </div>
+
+    <div class="glass rounded-2xl p-5">
+        <p class="text-gray-400">🌍 Unique IPs</p>
+        <h2 class="text-4xl font-bold mt-2">{{ ip_labels|length }}</h2>
+    </div>
+
+    <div class="glass rounded-2xl p-5 text-center">
+        <p class="text-gray-400 mb-3">🧠 Risk Meter</p>
+        <h2 class="text-3xl font-bold" id="risk-score">{{ alerts|length * 10 }}</h2>
+    </div>
+
+</div>
+
+<!-- Table -->
+<div class="glass rounded-2xl p-6 mb-8">
+    <h2 class="text-xl font-semibold mb-4">🚨 Live Threat Alerts</h2>
+
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="border-b border-gray-700 text-gray-400">
+                    <th class="p-3 text-left">IP</th>
+                    <th class="p-3 text-left">Attack</th>
+                    <th class="p-3 text-left">Severity</th>
+                    <th class="p-3 text-left">MITRE</th>
+                    <th class="p-3 text-left">Time</th>
+                </tr>
+            </thead>
+
+            <tbody id="alert-table-body">
+            {% for alert in alerts %}
+            <tr class="border-b border-gray-800 {% if alert.severity == 'Critical' %}pulse-red{% endif %}">
+                <td class="p-3">{{ alert.ip }}</td>
+                <td class="p-3">{{ alert.attack_type }}</td>
+                <td class="p-3">
+                    {% if alert.severity == 'Critical' %}
+                    <span class="bg-red-600 px-2 py-1 rounded text-xs">CRITICAL</span>
+                    {% elif alert.severity == 'High' %}
+                    <span class="bg-orange-500 px-2 py-1 rounded text-xs">HIGH</span>
+                    {% else %}
+                    <span class="bg-yellow-400 text-black px-2 py-1 rounded text-xs">LOW</span>
+                    {% endif %}
+                </td>
+                <td class="p-3">{{ alert.mitre }}</td>
+                <td class="p-3 text-gray-400">{{ alert.timestamp }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Charts -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+
+    <div class="glass rounded-2xl p-6">
+        <h2 class="text-xl mb-4">📊 Traffic</h2>
+        <canvas id="chart"></canvas>
+    </div>
+
+    <div class="glass rounded-2xl p-6">
+        <h2 class="text-xl mb-4">🔥 Attack Intensity</h2>
+        <canvas id="heatmap"></canvas>
+    </div>
+
+</div>
+
+<!-- Map -->
+<div class="glass rounded-2xl p-6 mb-8">
+    <h2 class="text-xl mb-4">🌍 Global Attack Map</h2>
+    <div id="map" style="height:500px;"></div>
+</div>
+
+<!-- Blocked IPs -->
+<div class="glass rounded-2xl p-6">
+    <h2 class="text-xl mb-4">🚫 Blocked IPs</h2>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {% for ip in blocked_ips %}
+        <div class="bg-red-500/20 rounded p-2 text-center">{{ ip }}</div>
+        {% endfor %}
+    </div>
+</div>
+
+</div>
+
+<div id="socket-status" class="bg-gray-800 text-gray-400 border border-gray-600">
+    ⚪ Connecting...
+</div>
+
+<!-- Scripts -->
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script>
+// ── MAP SETUP ──────────────────────────────────────────────
+const map = L.map('map').setView([20, 0], 2);
+
+// Dark tile layer that fits the SIEM aesthetic
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; OpenStreetMap &copy; CARTO',
+    subdomains: 'abcd',
+    maxZoom: 19
+}).addTo(map);
+
+// ── PULSING DOT ICON FACTORY ───────────────────────────────
+function makePulseIcon() {
+    return L.divIcon({
+        className: '',
+        html: `
+            <div class="attack-dot-wrapper">
+                <div class="attack-dot-ring"></div>
+                <div class="attack-dot-ring2"></div>
+                <div class="attack-dot-core"></div>
+            </div>`,
+        iconSize: [16, 16],
+        iconAnchor: [8, 8],
+        popupAnchor: [0, -10]
+    });
+}
+
+// ── RENDER INITIAL MAP DATA ────────────────────────────────
+const mapData = {{ map_data | safe }};
+
+mapData.forEach(ip => {
+    L.marker([ip.lat, ip.lon], { icon: makePulseIcon() })
+        .addTo(map)
+        .bindPopup(`
+            <b style="color:#ff2222">⚠ Attack Detected</b><br>
+            <b>IP:</b> ${ip.ip}<br>
+            ${ip.country ? '<b>Country:</b> ' + ip.country + '<br>' : ''}
+            ${ip.attack_type ? '<b>Type:</b> ' + ip.attack_type : ''}
+        `);
+});
+
+// ── ADD LIVE ALERT DOTS VIA SOCKET ────────────────────────
+function addAttackMarker(lat, lon, ip, type, severity) {
+    const marker = L.marker([lat, lon], { icon: makePulseIcon() })
+        .addTo(map)
+        .bindPopup(`
+            <b style="color:#ff2222">⚠ ${type}</b><br>
+            <b>IP:</b> ${ip}<br>
+            <b>Severity:</b> ${severity}
+        `);
+
+    // Auto-open popup for dramatic effect
+    marker.openPopup();
+    setTimeout(() => marker.closePopup(), 4000);
+}
+</script>
+
+<script>
+new Chart(document.getElementById("chart"), {
+    type: "bar",
+    data: {
+        labels: {{ ip_labels | safe }},
+        datasets: [{
+            label: "Requests",
+            data: {{ ip_values | safe }},
+            backgroundColor: "rgba(239,68,68,0.6)",
+            borderColor: "rgba(239,68,68,1)",
+            borderWidth: 1
+        }]
+    },
+    options: {
+        plugins: { legend: { labels: { color: "#fff" } } },
+        scales: {
+            x: { ticks: { color: "#9ca3af" }, grid: { color: "rgba(255,255,255,0.05)" } },
+            y: { ticks: { color: "#9ca3af" }, grid: { color: "rgba(255,255,255,0.05)" } }
+        }
+    }
+});
+</script>
+
+<script>
+new Chart(document.getElementById("heatmap"), {
+    type: "line",
+    data: {
+        labels: {{ ip_labels | safe }},
+        datasets: [{
+            label: "Intensity",
+            data: {{ ip_values | safe }},
+            borderColor: "rgba(239,68,68,1)",
+            backgroundColor: "rgba(239,68,68,0.15)",
+            fill: true,
+            tension: 0.4
+        }]
+    },
+    options: {
+        plugins: { legend: { labels: { color: "#fff" } } },
+        scales: {
+            x: { ticks: { color: "#9ca3af" }, grid: { color: "rgba(255,255,255,0.05)" } },
+            y: { ticks: { color: "#9ca3af" }, grid: { color: "rgba(255,255,255,0.05)" } }
+        }
+    }
+});
+</script>
+
+<script>
+const socket = io();
+const statusBadge = document.getElementById("socket-status");
+
+socket.on("connect", () => {
+    statusBadge.textContent = "🟢 Live";
+    statusBadge.className = "bg-green-900 text-green-400 border border-green-500";
+});
+
+socket.on("disconnect", () => {
+    statusBadge.textContent = "🔴 Offline";
+    statusBadge.className = "bg-red-900 text-red-400 border border-red-500";
+});
+
+let count = {{ alerts|length }};
+
+socket.on("alert", (data) => {
+    // ── Update table ──
+    const tbody = document.getElementById("alert-table-body");
+    const row = document.createElement("tr");
+    row.className = "border-b border-gray-800 terminal-line";
+    row.innerHTML = `
+        <td class="p-3">${data.ip}</td>
+        <td class="p-3">${data.type}</td>
+        <td class="p-3">${data.severity}</td>
+        <td class="p-3">${data.mitre}</td>
+        <td class="p-3">now</td>
+    `;
+    tbody.prepend(row);
+
+    count++;
+    document.getElementById("alert-count").textContent = count;
+    document.getElementById("risk-score").textContent = count * 10;
+
+    // ── Add pulsing dot on map if geo data is present ──
+    if (data.lat && data.lon) {
+        addAttackMarker(data.lat, data.lon, data.ip, data.type, data.severity);
+    }
+});
+</script>
+
+</body>
+</html>
